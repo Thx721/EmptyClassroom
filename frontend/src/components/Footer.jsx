@@ -8,10 +8,10 @@ function Footer() {
       <Text>
         © 2022-2026 Jray（原作者，已停止维护） · Continued by _Thx
         <Button
-          onClick={() => window.open("https://github.com/Jraaay/EmptyClassroom")}
+          onClick={() => window.open("https://github.com/Thx721/EmptyClassroom")}
           type="text"
           icon={<GithubOutlined />}
-          title="原作者仓库（已归档）"
+          title="GitHub 仓库"
         ></Button>
       </Text>
     </div>
