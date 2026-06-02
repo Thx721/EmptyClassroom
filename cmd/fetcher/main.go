@@ -5,7 +5,9 @@ import (
 	"EmptyClassroom/config"
 	"EmptyClassroom/logs"
 	"EmptyClassroom/service"
+	"EmptyClassroom/service/model"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -15,6 +17,7 @@ import (
 // 用法: go run cmd/fetcher/main.go
 // 输出: frontend/public/data.json
 func main() {
+	gob.Register(&model.ClassInfo{})
 	logs.Init(false)
 	config.InitConfig()
 	cache.InitCache()
