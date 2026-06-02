@@ -1,0 +1,22 @@
+{
+  "campus": [
+    {
+      "name": "西土城",
+      "id": 1,
+      "has_realtime": true,
+      "replace_regex": []
+    },
+    {
+      "name": "沙河",
+      "id": 4,
+      "has_realtime": true,
+      "replace_regex": []
+    },
+    {
+      "name": "海南",
+      "id": 3,
+      "has_realtime": false,
+      "replace_regex": []
+    }
+  ]
+}
