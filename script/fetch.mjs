@@ -122,10 +122,15 @@ function processJWData(jwData, campusName) {
 
     for (const classroomRaw of classrooms) {
       // 解析: "教3-205(100)" -> building="教3", name="205", size=100
-      const match = classroomRaw.match(/^(.+)-([^(]+)\((\d+)\)/);
-      if (!match) continue;
-      const [, buildingName, classroomName, sizeStr] = match;
-      const size = parseInt(sizeStr) || 0;
+      // 注意：教室名可能含 - (如 "未来学习大楼-202-203(100)")
+      // 在第一个 - 处拆分，匹配 Go 版 strings.Cut 的行为
+      const withoutParens = classroomRaw.split("(")[0];
+      const dashIdx = withoutParens.indexOf("-");
+      if (dashIdx < 0) continue;
+      const buildingName = withoutParens.substring(0, dashIdx);
+      const classroomName = withoutParens.substring(dashIdx + 1);
+      const sizeMatch = classroomRaw.match(/\((\d+)\)/);
+      const size = sizeMatch ? parseInt(sizeMatch[1]) : 0;
 
       if (!buildingIdMap.hasOwnProperty(buildingName)) {
         buildingIdMap[buildingName] = maxBuildingId;
