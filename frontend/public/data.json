@@ -1,1 +1,19 @@
-{"code":1,"data":null}
+{
+  "code": 0,
+  "data": {
+    "campus_info_map": {
+      "海南": {
+        "name": "海南",
+        "building_info_map": {},
+        "building_id_map": {},
+        "max_building_id": 0
+      }
+    },
+    "update_at": "2026-06-02T17:29:53.4856228+08:00",
+    "notification": null,
+    "is_fallback": {
+      "沙河": true,
+      "西土城": true
+    }
+  }
+}

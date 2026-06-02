@@ -40,11 +40,10 @@ jobs:
           JW_USERNAME: ${{ secrets.JW_USERNAME }}
           JW_PASSWORD: ${{ secrets.JW_PASSWORD }}
           CONFIG_PATH: config
-          GO111MODULE: on
           GOPROXY: https://proxy.golang.org,direct
         run: |
-          go mod download
-          go run ./cmd/fetcher/
+          go build -o fetcher ./cmd/fetcher/
+          ./fetcher
           echo "Data fetch complete"
           ls -la frontend/public/data.json
 
