@@ -197,11 +197,6 @@ function ClassTimePicker(props) {
                 : props.isDark
                 ? "#ffffffd9"
                 : "#000000d9",
-              borderColor: x.disabled
-                ? undefined
-                : props.isDark
-                ? "#434343"
-                : "#d9d9d9",
             }}
             disabled={x.disabled}
           >
@@ -249,13 +244,6 @@ function ClassTimePicker(props) {
               : props.isDark
               ? "#ffffffd9"
               : "#000000d9",
-            borderColor: props.isDataStale
-              ? undefined
-              : isAllChecked()
-              ? undefined
-              : props.isDark
-              ? "#434343"
-              : "#d9d9d9",
           }}
         >
           {isAllChecked() ? "全不选" : "全选"}
