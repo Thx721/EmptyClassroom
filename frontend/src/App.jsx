@@ -14,6 +14,7 @@ function App() {
   const [spining, setSpining] = useState(true);
   const [isError, setIsError] = useState(false);
   const [resp, setResp] = useState({ code: 1 });
+  const [isDataStale, setIsDataStale] = useState(false);
   const [selectedCampus, setSelectedCampus] = useState("");
   const [selectedBuildings, setSelectedBuildings] = useState([]);
   const [selectedClassTimes, setSelectedClassTimes] = useState([]);
@@ -83,6 +84,14 @@ function App() {
       })
       .then((resp) => {
         setResp(resp);
+        // 检查数据是否来自今天之前（数据过期，教务还没更新）
+        if (resp.code === 0 && resp.data?.update_at) {
+          const updateDate = new Date(resp.data.update_at).toLocaleDateString("zh-CN");
+          const todayDate = new Date().toLocaleDateString("zh-CN");
+          setIsDataStale(updateDate !== todayDate);
+        } else {
+          setIsDataStale(false);
+        }
         setIsError(false);
         setSpining(false);
       })
@@ -91,6 +100,13 @@ function App() {
           .then((resp) => resp.json())
           .then((resp) => {
             setResp(resp);
+            if (resp.code === 0 && resp.data?.update_at) {
+              const updateDate = new Date(resp.data.update_at).toLocaleDateString("zh-CN");
+              const todayDate = new Date().toLocaleDateString("zh-CN");
+              setIsDataStale(updateDate !== todayDate);
+            } else {
+              setIsDataStale(false);
+            }
             setIsError(false);
             setSpining(false);
           })
@@ -128,6 +144,7 @@ function App() {
           <Notification todayData={resp} />
           <CampusButtonGroup
             todayData={resp}
+            isDataStale={isDataStale}
             selectedCampus={selectedCampus}
             setSelectedCampus={setSelectedCampus}
             setSelectedBuildings={setSelectedBuildings}
@@ -142,12 +159,14 @@ function App() {
           />
           <BuildingPicker
             todayData={resp}
+            isDataStale={isDataStale}
             selectedBuildings={selectedBuildings}
             setSelectedBuildings={setSelectedBuildings}
             selectedCampus={selectedCampus}
           />
           <ClassTimePicker
             todayData={resp}
+            isDataStale={isDataStale}
             selectedClassTimes={selectedClassTimes}
             setSelectedClassTimes={setSelectedClassTimes}
             selectedCampus={selectedCampus}
@@ -158,6 +177,7 @@ function App() {
           />
           <EmptyClassroomTable
             todayData={resp}
+            isDataStale={isDataStale}
             selectedCampus={selectedCampus}
             selectedBuildings={selectedBuildings}
             selectedClassTimes={selectedClassTimes}

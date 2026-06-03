@@ -1,5 +1,5 @@
 import PropTypes from "prop-types";
-import { Button, Card } from "antd";
+import { Button, Card, Typography } from "antd";
 import "./BuildingPicker.css";
 
 function BuildingPicker(props) {
@@ -42,12 +42,29 @@ function BuildingPicker(props) {
         maxWidth: "350px",
       }}
     >
+      {props.isDataStale && (
+        <div
+          style={{
+            textAlign: "center",
+            marginBottom: 8,
+            padding: "4px 8px",
+            background: "#fffbe6",
+            border: "1px solid #faad14",
+            borderRadius: 4,
+          }}
+        >
+          <Typography.Text style={{ fontSize: 12, color: "#d48806" }}>
+            ⏳ 请等待获取今天的数据
+          </Typography.Text>
+        </div>
+      )}
       {options.map((item) => (
         <Button
           key={props.selectedCampus + item.value}
           type={
             props.selectedBuildings.includes(item.value) ? "primary" : "outline"
           }
+          disabled={props.isDataStale}
           onClick={() => {
             if (props.selectedBuildings.includes(item.value)) {
               props.setSelectedBuildings(
@@ -74,6 +91,7 @@ function BuildingPicker(props) {
 
 BuildingPicker.propTypes = {
   todayData: PropTypes.object,
+  isDataStale: PropTypes.bool,
   selectedBuildings: PropTypes.array,
   setSelectedBuildings: PropTypes.func,
   selectedCampus: PropTypes.string,

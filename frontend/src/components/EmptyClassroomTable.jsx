@@ -1,5 +1,5 @@
 import PropTypes from "prop-types";
-import { Empty, Card, Table, Button, Tag, Modal, Descriptions } from "antd";
+import { Empty, Card, Table, Button, Tag, Modal, Descriptions, Typography } from "antd";
 import { useEffect, useState } from "react";
 import "./EmptyClassroomTable.css";
 import CalculateEmptyClassroom from "../utils/calculate";
@@ -65,6 +65,22 @@ function EmptyClassroomTable(props) {
           maxWidth: "300px",
         }}
       >
+        {props.isDataStale && (
+          <div
+            style={{
+              textAlign: "center",
+              margin: "0 8px 8px",
+              padding: "4px 8px",
+              background: "#fffbe6",
+              border: "1px solid #faad14",
+              borderRadius: 4,
+            }}
+          >
+            <Typography.Text style={{ fontSize: 12, color: "#d48806" }}>
+              ⏳ 数据尚未更新，请等待获取今天的数据
+            </Typography.Text>
+          </div>
+        )}
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description={
@@ -273,6 +289,7 @@ function EmptyClassroomTable(props) {
 
 EmptyClassroomTable.propTypes = {
   todayData: PropTypes.object,
+  isDataStale: PropTypes.bool,
   selectedCampus: PropTypes.string,
   selectedBuildings: PropTypes.array,
   selectedClassTimes: PropTypes.array,

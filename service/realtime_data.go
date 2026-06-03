@@ -111,8 +111,11 @@ func QueryAll(ctx context.Context) (classInfo *model.ClassInfo, err error) {
 		IsFallback: map[string]bool{},
 	}
 	sysConfig := config.GetConfig()
+	hasRealtime := false
+	allRealtimeFailed := true
 	for _, campus := range sysConfig.Campus {
 		if campus.HasRealtime {
+			hasRealtime = true
 			errorTime := 0
 			jwClassInfo, err := QueryOne(ctx, campus.Id)
 			// 重试3次
@@ -124,6 +127,8 @@ func QueryAll(ctx context.Context) (classInfo *model.ClassInfo, err error) {
 			if err != nil {
 				logs.CtxError(ctx, "query failed: %v", err)
 				classInfo.IsFallback[campus.Name] = true
+			} else {
+				allRealtimeFailed = false
 			}
 			if err == nil && errorTime > 0 {
 				logs.CtxWarn(ctx, "query retry success, error time: %v", errorTime)
@@ -145,6 +150,11 @@ func QueryAll(ctx context.Context) (classInfo *model.ClassInfo, err error) {
 				BuildingIdMap:   map[string]int{},
 			}
 		}
+	}
+
+	// 如果存在实时校区但全部失败，返回错误让 Cronjob 重试
+	if hasRealtime && allRealtimeFailed {
+		return nil, errors.New("all realtime campuses failed to fetch data")
 	}
 
 	// 通知时间检查
@@ -256,6 +266,10 @@ func GetData(ctx context.Context, c *gin.Context) {
 		}
 		// 缓存超过30分钟，先返回旧数据，再异步刷新
 		go func() {
+			if !queryMu.TryLock() {
+				return // 已有刷新在进行中
+			}
+			defer queryMu.Unlock()
 			newCtx := logs.GenNewContext()
 			QueryAll(newCtx)
 		}()

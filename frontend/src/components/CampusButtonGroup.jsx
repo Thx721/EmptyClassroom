@@ -228,6 +228,7 @@ function CampusButtonGroup(props) {
 
 CampusButtonGroup.propTypes = {
   todayData: PropTypes.object.isRequired,
+  isDataStale: PropTypes.bool,
   selectedCampus: PropTypes.string,
   setSelectedCampus: PropTypes.func,
   setSelectedBuildings: PropTypes.func,

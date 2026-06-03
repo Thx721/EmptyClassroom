@@ -49,12 +49,14 @@ function ClassTimePicker(props) {
   const options = [];
   for (let i = 0; i <= 13; i++) {
     // 过去的时间段变灰：当前时间已超过该节课结束时间
+    // 数据过期时，所有时间段也禁用
     options.push({
       label: classes[i],
       value: i,
       disabled:
-        class_time[i].localeCompare(`${now_hour}:${now_minute}`) < 0 &&
-        !props.canSelectAllDay,
+        props.isDataStale ||
+        (class_time[i].localeCompare(`${now_hour}:${now_minute}`) < 0 &&
+          !props.canSelectAllDay),
     });
   }
 
@@ -138,6 +140,24 @@ function ClassTimePicker(props) {
           </div>
         </div>
       )}
+      {props.isDataStale && (
+        <div
+          style={{
+            textAlign: "center",
+            marginBottom: 8,
+            padding: "4px 8px",
+            background: props.isDark ? "#2a2a1a" : "#fffbe6",
+            border: "1px solid #faad14",
+            borderRadius: 4,
+          }}
+        >
+          <Typography.Text
+            style={{ fontSize: 12, color: "#d48806" }}
+          >
+            ⏳ 数据尚未更新，请等待获取今天的数据
+          </Typography.Text>
+        </div>
+      )}
       <div
         style={{
           display: "flex",
@@ -171,9 +191,18 @@ function ClassTimePicker(props) {
               padding: "0px",
               color: x.disabled
                 ? props.isDark
-                  ? "#ffffff73"
-                  : "#00000073"
-                : null,
+                  ? "#ffffff4d"
+                  : "#00000040"
+                : props.selectedClassTimes.includes(x.value)
+                ? undefined
+                : props.isDark
+                ? "#ffffffd9"
+                : "#000000d9",
+              borderColor: x.disabled
+                ? undefined
+                : props.isDark
+                ? "#434343"
+                : "#d9d9d9",
             }}
             disabled={x.disabled}
           >
@@ -205,12 +234,29 @@ function ClassTimePicker(props) {
         <Button
           type={isAllChecked() ? "primary" : "outline"}
           onClick={onCheckAllChange}
+          disabled={props.isDataStale}
           style={{
             borderRadius: "0px",
             width: "45px",
             margin: "2px",
             height: props.showClassTime ? "45px" : "30px",
             padding: "0px",
+            color: props.isDataStale
+              ? props.isDark
+                ? "#ffffff4d"
+                : "#00000040"
+              : isAllChecked()
+              ? undefined
+              : props.isDark
+              ? "#ffffffd9"
+              : "#000000d9",
+            borderColor: props.isDataStale
+              ? undefined
+              : isAllChecked()
+              ? undefined
+              : props.isDark
+              ? "#434343"
+              : "#d9d9d9",
           }}
         >
           {isAllChecked() ? "全不选" : "全选"}
@@ -222,6 +268,7 @@ function ClassTimePicker(props) {
 
 ClassTimePicker.propTypes = {
   todayData: PropTypes.object,
+  isDataStale: PropTypes.bool,
   selectedClassTimes: PropTypes.array,
   setSelectedClassTimes: PropTypes.func,
   selectedCampus: PropTypes.string,
