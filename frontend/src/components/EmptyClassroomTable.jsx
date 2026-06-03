@@ -72,7 +72,6 @@ function EmptyClassroomTable(props) {
               margin: "0 8px 8px",
               padding: "4px 8px",
               background: "#fffbe6",
-              border: "1px solid #faad14",
               borderRadius: 4,
             }}
           >

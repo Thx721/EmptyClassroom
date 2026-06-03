@@ -147,7 +147,6 @@ function ClassTimePicker(props) {
             marginBottom: 8,
             padding: "4px 8px",
             background: props.isDark ? "#2a2a1a" : "#fffbe6",
-            border: "1px solid #faad14",
             borderRadius: 4,
           }}
         >

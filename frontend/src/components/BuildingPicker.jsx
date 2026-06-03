@@ -49,7 +49,6 @@ function BuildingPicker(props) {
             marginBottom: 8,
             padding: "4px 8px",
             background: "#fffbe6",
-            border: "1px solid #faad14",
             borderRadius: 4,
           }}
         >
