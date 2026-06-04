@@ -1,14 +1,13 @@
 // 空教室数据抓取脚本 - Node.js 版
-// 供 GitHub Actions 使用，每天定时从 JWGL API 拉取数据
+// 供 GitHub Actions 使用，通过阿里云 Relay 中转连接教务
 import crypto from "crypto";
 import fs from "fs";
 
-// 硬编码 IPv6 绕过 DNS 解析（GitHub Actions 的 DNS 会 EAI_AGAIN）
-// jwglweixin.bupt.edu.cn → CNAME vn.bupt.edu.cn → 10.3.19.2(私网) / 2001:da8:215:4038::161(CERNET IPv6)
-const API_HOST = "jwglweixin.bupt.edu.cn";
-const API_IPV6 = "2001:da8:215:4038::161";
-const LOGIN_URL = `http://[${API_IPV6}]/bjyddx/login`;
-const QUERY_URL = `http://[${API_IPV6}]/bjyddx/todayClassrooms?campusId=0`;
+// Relay 地址 — 阿里云北京 ECS，走教育网直连教务
+const RELAY_URL = process.env.RELAY_URL || "http://39.106.99.152:3000";
+const RELAY_SECRET = process.env.RELAY_SECRET || "emptyclassroom";
+const LOGIN_URL = `${RELAY_URL}/login`;
+const QUERY_URL = `${RELAY_URL}/query`;
 
 const CAMPUS_LIST = [
   { id: 1, name: "西土城" },
@@ -126,15 +125,6 @@ function normalizeDate(raw) {
 // ============================================================
 
 async function fetchWithRetry(url, options, label) {
-  // 强制走硬编码 IPv6 + 补 Host 头，跳过 DNS 解析
-  const fetchOptions = {
-    ...options,
-    headers: {
-      ...(options?.headers || {}),
-      Host: API_HOST,
-    },
-  };
-
   let attempt = 0;
   let lastError;
   while (attempt < MAX_RETRIES) {
@@ -196,6 +186,7 @@ async function main() {
     encode: "1",
     captchaData: "",
     codeVal: "",
+    secret: RELAY_SECRET,
   });
 
   const loginResult = await fetchWithRetry(
@@ -229,7 +220,7 @@ async function main() {
     console.log(`Querying ${campus.name} (id=${campus.id})...`);
 
     const queryResult = await fetchWithRetry(
-      `${QUERY_URL}${campus.id}`,
+      `${QUERY_URL}?campusId=${campus.id}&secret=${RELAY_SECRET}`,
       { headers: { token } },
       `${campus.name} query`
     );
