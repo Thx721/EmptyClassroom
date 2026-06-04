@@ -220,7 +220,7 @@ async function main() {
     console.log(`Querying ${campus.name} (id=${campus.id})...`);
 
     const queryResult = await fetchWithRetry(
-      `${QUERY_URL}?campusId=${campus.id}&secret=${RELAY_SECRET}`,
+      `${QUERY_URL}?campusId=0${campus.id}&secret=${RELAY_SECRET}`,
       { headers: { token } },
       `${campus.name} query`
     );

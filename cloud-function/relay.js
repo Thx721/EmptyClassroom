@@ -77,7 +77,7 @@ const server = http.createServer(async (req, res) => {
       const campusId = u.searchParams.get("campusId") || "1";
       const token = req.headers["token"] || u.searchParams.get("token") || "";
       const target = `${QUERY_URL}?campusId=${campusId}`;
-      console.log(`[query] -> campusId=${campusId}`);
+      console.log(`[query] -> campusId=${campusId} token=${token.substring(0, 20)}...`);
       const data = await jwRequest(target, "GET", { token });
       console.log(`[query] <- ${JSON.stringify(data).substring(0, 100)}`);
       res.statusCode = 200;
