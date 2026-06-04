@@ -131,7 +131,7 @@ async function fetchWithRetry(url, options, label) {
     attempt++;
     try {
       console.log(`  ${label}: attempt ${attempt}/${MAX_RETRIES}`);
-      const resp = await fetch(url, fetchOptions);
+      const resp = await fetch(url, options);
       const data = await resp.json();
       console.log(`  ${label}: success on attempt ${attempt}`);
       return { ok: true, data, attempts: attempt };
