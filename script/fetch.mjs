@@ -2,6 +2,7 @@
 // 供 GitHub Actions 使用，每天定时从 JWGL API 拉取数据
 import crypto from "crypto";
 import dns from "node:dns/promises";
+import { execSync } from "node:child_process";
 import fs from "fs";
 
 const LOGIN_URL = "http://jwglweixin.bupt.edu.cn/bjyddx/login";
@@ -350,6 +351,32 @@ async function main() {
     data_fresh: dataIsFresh ? "true" : "false",
     data_date: globalDataDate,
   });
+
+  // 本地运行时自动 commit + push，让 GitHub Actions 只管 build & deploy
+  if (isLocal() && dataIsFresh) {
+    await gitCommitAndPush(beijingToday);
+  }
+}
+
+// ============================================================
+// 本地模式：自动 commit + push
+// ============================================================
+
+function isLocal() {
+  return !process.env.GITHUB_ACTIONS;
+}
+
+async function gitCommitAndPush(dateStr) {
+  try {
+    console.log("Local mode: committing and pushing data.json...");
+    execSync("git add frontend/public/data.json", { stdio: "inherit" });
+    execSync(`git commit -m "data: refresh ${dateStr}"`, { stdio: "inherit" });
+    execSync("git push origin main", { stdio: "inherit" });
+    console.log("Local mode: pushed to GitHub ✓");
+  } catch (err) {
+    // commit 可能因为"nothing to commit"而失败，忽略
+    console.warn(`Local mode: git push skipped (${err.message})`);
+  }
 }
 
 // ============================================================
