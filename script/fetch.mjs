@@ -11,7 +11,8 @@ const CAMPUS_LIST = [
   { id: 4, name: "沙河" },
 ];
 
-const RETRY_DELAY_MS = 45_000; // 45 秒，教务登不上就间隔重试直到成功
+const MAX_RETRIES = 30;        // 最多重试 30 次，超过就认命走降级
+const MAX_RETRY_DELAY_MS = 30_000; // 随机延迟上限 30 秒，避免固定间隔被限流
 
 // ============================================================
 // 工具函数
@@ -123,22 +124,24 @@ function normalizeDate(raw) {
 async function fetchWithRetry(url, options, label) {
   let attempt = 0;
   let lastError;
-  // 持续重试直到成功，45s 间隔
-  while (true) {
+  while (attempt < MAX_RETRIES) {
     attempt++;
     try {
-      console.log(`  ${label}: attempt ${attempt}`);
+      console.log(`  ${label}: attempt ${attempt}/${MAX_RETRIES}`);
       const resp = await fetch(url, options);
       const data = await resp.json();
       console.log(`  ${label}: success on attempt ${attempt}`);
-      return { ok: true, data };
+      return { ok: true, data, attempts: attempt };
     } catch (err) {
       lastError = err;
-      console.error(`  ${label}: attempt ${attempt} failed: ${err.message}`);
-      console.log(`  ${label}: retrying in ${RETRY_DELAY_MS / 1000}s...`);
-      await sleep(RETRY_DELAY_MS);
+      const delay = Math.floor(Math.random() * MAX_RETRY_DELAY_MS);
+      console.error(`  ${label}: attempt ${attempt}/${MAX_RETRIES} failed: ${err.message}`);
+      console.log(`  ${label}: retrying in ${(delay / 1000).toFixed(1)}s...`);
+      await sleep(delay);
     }
   }
+  console.error(`  ${label}: EXHAUSTED after ${MAX_RETRIES} attempts, giving up`);
+  return { ok: false, error: lastError, attempts: attempt };
 }
 
 // ============================================================
