@@ -79,7 +79,8 @@ const server = http.createServer(async (req, res) => {
       const target = `${QUERY_URL}?campusId=${campusId}`;
       console.log(`[query] -> campusId=${campusId} token=${token.substring(0, 20)}...`);
       const data = await jwRequest(target, "GET", { token });
-      console.log(`[query] <- ${JSON.stringify(data).substring(0, 100)}`);
+      let dd = data.data||[];
+      console.log(`[query] <- ${dd.length} items, first keys=${JSON.stringify(Object.keys(dd[0]||{}))}`);
       res.statusCode = 200;
       return res.end(JSON.stringify(data));
     }
