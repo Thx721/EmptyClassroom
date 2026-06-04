@@ -111,13 +111,20 @@ function checkDataFreshness(jwData) {
 /** 把各种日期格式统一成 YYYY-MM-DD */
 function normalizeDate(raw) {
   if (!raw) return null;
-  // 尝试直接解析
+  // 尝试标准日期解析（旧格式：2026-06-04）
   const d = new Date(raw);
-  if (isNaN(d.getTime())) return null;
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  if (!isNaN(d.getTime())) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+  // 新格式：NODETIME 改为时间段（如 "08:00-08:45"）
+  // /todayClassrooms 接口只返回今天数据，直接取北京日期
+  if (/^\d{2}:\d{2}/.test(raw)) {
+    return getBeijingToday();
+  }
+  return null;
 }
 
 // ============================================================
