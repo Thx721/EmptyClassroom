@@ -1,6 +1,7 @@
 // 空教室数据抓取脚本 - Node.js 版
 // 供 GitHub Actions 使用，每天定时从 JWGL API 拉取数据
 import crypto from "crypto";
+import dns from "node:dns/promises";
 import fs from "fs";
 
 const LOGIN_URL = "http://jwglweixin.bupt.edu.cn/bjyddx/login";
@@ -121,14 +122,42 @@ function normalizeDate(raw) {
 // 带重试的网络请求
 // ============================================================
 
+/**
+ * 教务服务器 DNS 只配了内网 IPv4 (10.3.19.2) + 教育网 IPv6
+ * GitHub Actions 走 IPv4 会直接撞墙 → 手动解析 IPv6 直连
+ */
+async function resolveIPv6OrNull(hostname) {
+  try {
+    const { address } = await dns.lookup(hostname, { family: 6 });
+    console.log(`  DNS: ${hostname} → IPv6 ${address}`);
+    return address;
+  } catch {
+    console.warn(`  DNS: ${hostname} IPv6 resolve failed, fallback to default`);
+    return null;
+  }
+}
+
 async function fetchWithRetry(url, options, label) {
+  // 尝试 IPv6 解析，应用到本次及后续所有重试
+  const urlObj = new URL(url);
+  const originalHost = urlObj.hostname;
+  const ipv6 = await resolveIPv6OrNull(originalHost);
+
   let attempt = 0;
   let lastError;
   while (attempt < MAX_RETRIES) {
     attempt++;
     try {
+      // 如果拿到了 IPv6，用括号包裹直连，同时补上 Host 头
+      const fetchUrl = ipv6
+        ? url.replace(originalHost, `[${ipv6}]`)
+        : url;
+      const fetchOptions = ipv6
+        ? { ...options, headers: { ...(options?.headers || {}), Host: originalHost } }
+        : options;
+
       console.log(`  ${label}: attempt ${attempt}/${MAX_RETRIES}`);
-      const resp = await fetch(url, options);
+      const resp = await fetch(fetchUrl, fetchOptions);
       const data = await resp.json();
       console.log(`  ${label}: success on attempt ${attempt}`);
       return { ok: true, data, attempts: attempt };
