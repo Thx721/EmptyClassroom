@@ -27,9 +27,10 @@ function jwRequest(url, method, headers, body) {
       timeout: 30000,
     };
     const req = http.request(opts, (res) => {
-      let data = "";
-      res.on("data", (c) => (data += c));
+      const chunks = [];
+      res.on("data", (c) => chunks.push(c));
       res.on("end", () => {
+        const data = Buffer.concat(chunks).toString("utf-8");
         try { resolve(JSON.parse(data)); } catch { resolve(data); }
       });
     });
