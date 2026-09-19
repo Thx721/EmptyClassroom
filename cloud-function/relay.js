@@ -1,18 +1,25 @@
-// 教务 API Relay — 阿里云 ECS 中转
-// 接收 GitHub Actions 请求，转发到北邮教务服务器
-// 部署: node relay.js  →  监听 0.0.0.0:3000
+// Teaching-affairs API relay.
+//
+// GitHub Actions cannot reach the BUPT teaching-affairs API directly: the
+// hostname resolves to 10.3.19.2, an address that only exists inside the
+// campus network. This process runs on a machine that sits on that network
+// and forwards the two calls the fetcher needs.
+//
+// Run: node relay.js   ->   listens on BIND_HOST:BIND_PORT
 
 const http = require("http");
+const os = require("os");
 
 const JW_HOST = "jwglweixin.bupt.edu.cn";
 const LOGIN_URL = `http://${JW_HOST}/bjyddx/login`;
 const QUERY_URL = `http://${JW_HOST}/bjyddx/todayClassrooms`;
 
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.BIND_HOST || "0.0.0.0";
 const SECRET = process.env.RELAY_SECRET || "emptyclassroom";
 
 // ============================================================
-// 简易 HTTP 转发（不使用第三方依赖）
+// Plain HTTP forwarding, no third-party dependencies
 // ============================================================
 
 function jwRequest(url, method, headers, body) {
@@ -41,8 +48,21 @@ function jwRequest(url, method, headers, body) {
   });
 }
 
+// Non-loopback addresses of this machine. Used to locate the box on the
+// campus LAN when its DHCP address has changed.
+function localAddresses() {
+  const out = {};
+  for (const [name, addrs] of Object.entries(os.networkInterfaces())) {
+    for (const a of addrs || []) {
+      if (a.internal) continue;
+      (out[name] = out[name] || []).push(a.address);
+    }
+  }
+  return out;
+}
+
 // ============================================================
-// HTTP Server
+// HTTP server
 // ============================================================
 
 const server = http.createServer(async (req, res) => {
@@ -58,37 +78,45 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
-    // 构建不含 secret 的查询参数（教务不认识这个字段）
+    // Build the query string without "secret" — the teaching API does not
+    // know that field.
     const fwd = new URLSearchParams(u.searchParams);
     fwd.delete("secret");
     const fwdQS = fwd.toString();
 
-    // ── POST /login ──
+    // -- POST /login --
     if (req.method === "POST" && path === "/login") {
       const target = LOGIN_URL + (fwdQS ? "?" + fwdQS : "");
-      console.log(`[login] -> ${target.substring(0, 80)}...`);
       const data = await jwRequest(target, "POST", {});
-      console.log(`[login] <- ${JSON.stringify(data).substring(0, 100)}`);
+      // Never log the body: a successful login response carries a token.
+      const code = data && typeof data === "object" ? data.code : "?";
+      console.log(`[login] code=${code}`);
       res.statusCode = 200;
       return res.end(JSON.stringify(data));
     }
 
-    // ── GET /query ──
+    // -- GET /query --
     if (req.method === "GET" && path === "/query") {
       const campusId = u.searchParams.get("campusId") || "1";
       const token = req.headers["token"] || u.searchParams.get("token") || "";
       const target = `${QUERY_URL}?campusId=${campusId}`;
-      console.log(`[query] -> campusId=${campusId} token=${token.substring(0, 20)}...`);
       const data = await jwRequest(target, "GET", { token });
-      let dd = data.data||[], f0 = dd[0]||{};
-      console.log(`[query] <- ${dd.length} items, NODETIME=${f0.NODETIME}`);
+      const items = (data && data.data) || [];
+      console.log(`[query] campusId=${campusId} items=${items.length}`);
       res.statusCode = 200;
       return res.end(JSON.stringify(data));
     }
 
-    // ── GET /health ──
+    // -- GET /health --
     if (req.method === "GET" && path === "/health") {
       return res.end(JSON.stringify({ ok: true, time: new Date().toISOString() }));
+    }
+
+    // -- GET /lanip --
+    // Reports where this box currently sits on the LAN. The tunnel URL is
+    // fixed, so this is how to rediscover the address after a DHCP change.
+    if (req.method === "GET" && path === "/lanip") {
+      return res.end(JSON.stringify({ hostname: os.hostname(), addresses: localAddresses() }));
     }
 
     res.statusCode = 404;
@@ -100,6 +128,6 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Relay listening on port ${PORT}, secret=${SECRET}`);
+server.listen(PORT, HOST, () => {
+  console.log(`Relay listening on ${HOST}:${PORT}`);
 });

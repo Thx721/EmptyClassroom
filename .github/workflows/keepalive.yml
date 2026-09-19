@@ -1,0 +1,58 @@
+name: Repository Keepalive
+
+# GitHub automatically disables every scheduled workflow in a repository that
+# has seen no activity for 60 days. This project's only commits come from the
+# refresh job, and that job can legitimately produce no commits for months
+# (the workflow writes to a cache, not to git), so the repository goes quiet
+# and the refresh schedule silently dies.
+#
+# This job writes a timestamp file whenever the repository has been quiet for
+# more than 45 days. That commit resets the 60-day timer with room to spare.
+# It is a no-op on every other run.
+
+on:
+  schedule:
+    # Mondays 12:17 Beijing time. Off the hour on purpose: cron jobs that all
+    # fire at :00 queue up behind each other on GitHub's shared runners.
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: repository-keepalive
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Touch the repository if it has been quiet for too long
+        run: |
+          set -euo pipefail
+
+          last_commit_epoch=$(git log -1 --format=%ct)
+          now_epoch=$(date +%s)
+          age_days=$(( (now_epoch - last_commit_epoch) / 86400 ))
+
+          echo "Last commit was ${age_days} day(s) ago."
+
+          if [ "$age_days" -lt 45 ]; then
+            echo "Repository is active enough. Nothing to do."
+            exit 0
+          fi
+
+          echo "Repository has been quiet for ${age_days} days. Writing a keepalive commit."
+
+          mkdir -p .github
+          date -u +'%Y-%m-%dT%H:%M:%SZ' > .github/keepalive
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/keepalive
+          git commit -m "chore: keepalive commit to reset the scheduled workflow timer"
+          git push
