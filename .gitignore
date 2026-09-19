@@ -31,3 +31,8 @@ Thumbs.db
 
 # Go workspace
 go.work
+
+# Raw teaching-affairs API dumps. These are scraped snapshots rather than
+# source, they can be re-fetched at any time, and this repository is public.
+raw_jwgl_data_*.json
+test/fixtures/

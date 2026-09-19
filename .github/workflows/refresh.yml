@@ -2,15 +2,16 @@ name: Refresh Classroom Data
 
 on:
   schedule:
-    # 北京时间：
-    #   凌晨密集：00:00 / 02:00 / 04:00 / 06:00 / 07:00
-    #   白天轮询：08:00 ~ 21:00 每小时一次
-    # 每次最多 30 次重试（随机 0~30s 间隔），拿到当天数据后后续全天跳过
+    # Beijing time:
+    #   Overnight burst: 00:00 / 02:00 / 04:00 / 06:00 / 07:00
+    #   Daytime polling: once an hour from 08:00 to 21:00
+    # Each run retries up to 30 times (random 0-30s backoff). Once today's data
+    # is captured, every later cron run on the same day skips the work.
     - cron: '0 0-13,16,18,20,22,23 * * *'
   workflow_dispatch:
 
-# 同一时间只允许一个刷新任务在跑
-# 如果 2 点 cron 触发时 0 点的还在重试 → 直接杀掉 0 点的，让 2 点的接棒
+# Only one refresh may run at a time. If the 02:00 cron fires while the 00:00
+# run is still retrying, the older run is killed and the newer one takes over.
 concurrency:
   group: classroom-refresh
   cancel-in-progress: true
@@ -23,15 +24,15 @@ jobs:
 
     steps:
       # ============================================================
-      # 0. 计算北京时间日期
+      # 0. Compute the Beijing date
       # ============================================================
       - name: Get Beijing date
         id: date
         run: echo "beijing_date=$(TZ='Asia/Shanghai' date +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
 
       # ============================================================
-      # 1. 检查今天是否已拿到新鲜数据
-      #    如果已有 → 跳过所有后续步骤
+      # 1. Check whether fresh data has already been captured today.
+      #    If so, skip every remaining step.
       # ============================================================
       - name: Check if fresh data already exists for today
         id: fresh
@@ -43,17 +44,17 @@ jobs:
       - name: Skip (already fresh today)
         if: steps.fresh.outputs.cache-hit == 'true'
         run: |
-          echo "=== $(TZ='Asia/Shanghai' date): 今日新鲜数据已获取，跳过刷新 ==="
+          echo "=== $(TZ='Asia/Shanghai' date): fresh data already captured, skipping refresh ==="
 
       # ============================================================
-      # 2. 拉取数据（仅当今日未拿到新鲜数据时执行）
+      # 2. Fetch data (only when today's fresh data is still missing)
       # ============================================================
       - name: Checkout
         if: steps.fresh.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
 
-      # 恢复上次成功拉取的数据，用于 API 挂了时做降级兜底
-      # 先匹配今天的 key，没有则回退到最近一次成功的数据
+      # Restore the last successfully fetched data, used as a fallback when the
+      # API is down. Prefer today's key, otherwise fall back to the newest one.
       - name: Restore last known data
         if: steps.fresh.outputs.cache-hit != 'true'
         uses: actions/cache/restore@v4
@@ -77,12 +78,17 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: frontend/pnpm-lock.yaml
 
+      # RELAY_URL and RELAY_SECRET point at the campus-hosted relay that sits
+      # between this runner and the teaching-affairs API. They are repository
+      # secrets so the tunnel address and shared secret never land in the repo.
       - name: Fetch classroom data
         id: fetch
         if: steps.fresh.outputs.cache-hit != 'true'
         env:
           JW_USERNAME: ${{ secrets.JW_USERNAME }}
           JW_PASSWORD: ${{ secrets.JW_PASSWORD }}
+          RELAY_URL: ${{ secrets.RELAY_URL }}
+          RELAY_SECRET: ${{ secrets.RELAY_SECRET }}
         run: node script/fetch.mjs
 
       - name: Install frontend dependencies
@@ -106,14 +112,14 @@ jobs:
           command: pages deploy frontend/dist --project-name=emptyclassroom
 
       # ============================================================
-      # 3. 标记"今日已获取新鲜数据"
-      #    写入标记文件 + 缓存，阻止今天后续的重复刷新
+      # 3. Mark "today's fresh data captured".
+      #    Writes a marker file and caches it so later cron runs today stop.
       # ============================================================
       - name: Write fresh-today marker
         if: steps.fresh.outputs.cache-hit != 'true' && steps.fetch.outputs.data_fresh == 'true'
         run: |
           echo "${{ steps.date.outputs.beijing_date }} fresh" > .fresh-today
-          echo "=== 标记今日数据已更新，后续 cron 将跳过 ==="
+          echo "=== Marked today's data as updated; later cron runs will skip ==="
 
       - name: Save freshness cache
         if: steps.fresh.outputs.cache-hit != 'true' && steps.fetch.outputs.data_fresh == 'true'
@@ -122,8 +128,8 @@ jobs:
           path: .fresh-today
           key: classroom-fresh-${{ steps.date.outputs.beijing_date }}
 
-      # 持久化本次拉到的 data.json（即使数据是旧的也比空壳强）
-      # 下次 checkout 如果没有 data.json，会从这里恢复到 frontend/public/
+      # Persist the data.json fetched by this run. Even stale data beats an
+      # empty shell, and a later checkout with no data.json restores it here.
       - name: Save data cache
         if: steps.fresh.outputs.cache-hit != 'true' && steps.fetch.outputs.data_fresh == 'true'
         uses: actions/cache/save@v4
@@ -132,7 +138,7 @@ jobs:
           key: classroom-data-${{ steps.date.outputs.beijing_date }}
 
       # ============================================================
-      # 4. 总结
+      # 4. Summary
       # ============================================================
       - name: Summary
         if: always()

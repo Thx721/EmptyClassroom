@@ -1,27 +1,32 @@
-// 空教室数据抓取脚本 - Node.js 版
-// 供 GitHub Actions 使用，通过阿里云 Relay 中转连接教务
+// Empty-classroom data fetcher - Node.js edition.
+// Used by GitHub Actions. Reaches the teaching-affairs API through a relay
+// hosted on the campus network.
 import crypto from "crypto";
 import fs from "fs";
 
-// Relay 地址 — 阿里云北京 ECS，走教育网直连教务
-const RELAY_URL = process.env.RELAY_URL || "http://39.106.99.152:3000";
+// Relay address. RELAY_URL is injected from the repository secrets and points
+// at the public tunnel in front of the campus-hosted relay. The localhost
+// fallback is only useful when running this script on the relay box itself.
+const RELAY_URL = process.env.RELAY_URL || "http://127.0.0.1:3000";
 const RELAY_SECRET = process.env.RELAY_SECRET || "emptyclassroom";
 const LOGIN_URL = `${RELAY_URL}/login`;
 const QUERY_URL = `${RELAY_URL}/query`;
 
+// Campus names double as the keys of campus_info_map in the published
+// data.json, so they must match the frontend's expectations exactly.
 const CAMPUS_LIST = [
   { id: 1, name: "西土城" },
   { id: 4, name: "沙河" },
 ];
 
-const MAX_RETRIES = 30;        // 最多重试 30 次，超过就认命走降级
-const MAX_RETRY_DELAY_MS = 30_000; // 随机延迟上限 30 秒，避免固定间隔被限流
+const MAX_RETRIES = 30;           // Give up after 30 attempts and fall back.
+const MAX_RETRY_DELAY_MS = 30_000; // Random backoff ceiling, to dodge rate limits.
 
 // ============================================================
-// 工具函数
+// Helpers
 // ============================================================
 
-/** 获取北京时间今天的日期字符串 YYYY-MM-DD */
+/** Today's date in Beijing as YYYY-MM-DD. */
 function getBeijingToday() {
   const now = new Date();
   const beijing = new Date(
@@ -33,12 +38,12 @@ function getBeijingToday() {
   return `${y}-${m}-${d}`;
 }
 
-/** 延迟 */
+/** Sleep for the given number of milliseconds. */
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// AES-128-ECB + 双重 Base64 加密
+// AES-128-ECB with double Base64 encoding, as the API expects.
 function encryptPassword(pwd) {
   const key = Buffer.from("qzkj1kjghd=876&*");
   const data = Buffer.from(`"${pwd}"`);
@@ -59,14 +64,15 @@ function encryptPassword(pwd) {
 }
 
 // ============================================================
-// 数据新鲜度检查
+// Data freshness check
 // ============================================================
 
 /**
- * 检查 JWGL 返回的数据是否属于"今天"
- * 从每条数据的 NODETIME 字段提取日期，与北京今天对比
+ * Check whether the data returned by the teaching-affairs system belongs to
+ * "today". The date is read from each record's NODETIME field and compared
+ * against the current Beijing date.
  *
- * @param {Array} jwData - API 返回的原始数据 [{NODETIME, NODENAME, CLASSROOMS}, ...]
+ * @param {Array} jwData - Raw API records [{NODETIME, NODENAME, CLASSROOMS}, ...]
  * @returns {{ fresh: boolean, dataDate: string, matchCount: number, totalCount: number }}
  */
 function checkDataFreshness(jwData) {
@@ -76,7 +82,7 @@ function checkDataFreshness(jwData) {
   for (const item of jwData || []) {
     const dt = item.NODETIME;
     if (dt) {
-      // 统一格式化为 YYYY-MM-DD，防止 API 返回不同格式
+      // Normalize to YYYY-MM-DD; the API has returned several formats.
       const parsed = normalizeDate(dt);
       if (parsed) {
         dateCounts[parsed] = (dateCounts[parsed] || 0) + 1;
@@ -94,7 +100,7 @@ function checkDataFreshness(jwData) {
     };
   }
 
-  // 取出现次数最多的日期
+  // The most frequent date wins.
   dates.sort((a, b) => dateCounts[b] - dateCounts[a]);
   const dominantDate = dates[0];
   const matchCount = dateCounts[today] || 0;
@@ -108,10 +114,10 @@ function checkDataFreshness(jwData) {
   };
 }
 
-/** 把各种日期格式统一成 YYYY-MM-DD */
+/** Normalize the various date formats into YYYY-MM-DD. */
 function normalizeDate(raw) {
   if (!raw) return null;
-  // 尝试标准日期解析（旧格式：2026-06-04）
+  // Try standard date parsing first (the old format: 2026-06-04).
   const d = new Date(raw);
   if (!isNaN(d.getTime())) {
     const y = d.getFullYear();
@@ -119,8 +125,8 @@ function normalizeDate(raw) {
     const day = String(d.getDate()).padStart(2, "0");
     return `${y}-${m}-${day}`;
   }
-  // 新格式：NODETIME 改为时间段（如 "08:00-08:45"）
-  // /todayClassrooms 接口只返回今天数据，直接取北京日期
+  // New format: NODETIME became a time slot (e.g. "08:00-08:45"). The
+  // /todayClassrooms endpoint only ever returns today, so use today's date.
   if (/^\d{2}:\d{2}/.test(raw)) {
     return getBeijingToday();
   }
@@ -128,7 +134,7 @@ function normalizeDate(raw) {
 }
 
 // ============================================================
-// 带重试的网络请求
+// Network request with retries
 // ============================================================
 
 async function fetchWithRetry(url, options, label) {
@@ -155,7 +161,7 @@ async function fetchWithRetry(url, options, label) {
 }
 
 // ============================================================
-// 主逻辑
+// Main flow
 // ============================================================
 
 async function main() {
@@ -170,7 +176,7 @@ async function main() {
   console.log(`=== Fetch started | Beijing date: ${beijingToday} ===`);
 
   // ----------------------------------------------------------
-  // 0. 读取已有数据（用于降级：API 失败时保留旧数据）
+  // 0. Read the existing data, used as a fallback when the API fails.
   // ----------------------------------------------------------
   const existingPath = "frontend/public/data.json";
   let existingData = null;
@@ -184,7 +190,7 @@ async function main() {
   }
 
   // ----------------------------------------------------------
-  // 1. 登录
+  // 1. Log in
   // ----------------------------------------------------------
   console.log("Logging in...");
   const loginParams = new URLSearchParams({
@@ -204,18 +210,19 @@ async function main() {
 
   if (!loginResult.ok || loginResult.data.code !== "1") {
     console.error("Login failed after all retries:", loginResult.data || loginResult.error);
-    // 降级：保留旧数据 + 加警告
+    // Fallback: keep the previous data and attach a warning.
     writeFallbackData(existingData, beijingToday, "login_failed");
-    // 输出给 GitHub Actions 用的标记
+    // State consumed by the GitHub Actions workflow.
     outputGitHubActionsState({ data_fresh: "false", reason: "login_failed" });
-    process.exit(0); // 不 exit(1)，让 workflow 继续部署降级数据
+    process.exit(0); // Exit 0 on purpose so the workflow still deploys the fallback.
   }
 
   const token = loginResult.data.data.token;
   console.log("Login success");
 
   // ----------------------------------------------------------
-  // 2. 查询各校区（冗余设计：单个校区失败不影响其他校区）
+  // 2. Query each campus. Redundant by design: one campus failing must not
+  //    take the others down with it.
   // ----------------------------------------------------------
   const campusInfoMap = {};
   const isFallback = {};
@@ -237,7 +244,7 @@ async function main() {
       isFallback[campus.name] = true;
       allFresh = false;
 
-      // 尝试从旧数据中保留该校区数据
+      // Carry this campus's data over from the previous run.
       if (existingData?.data?.campus_info_map?.[campus.name]) {
         campusInfoMap[campus.name] =
           existingData.data.campus_info_map[campus.name];
@@ -251,7 +258,7 @@ async function main() {
     const jwData = queryResult.data.data;
     console.log(`  ${campus.name}: got ${jwData?.length || 0} records`);
 
-    // 新鲜度检查
+    // Freshness check
     const freshness = checkDataFreshness(jwData);
     console.log(
       `  ${campus.name}: NODETIME analysis → dominant=${freshness.dataDate}, ` +
@@ -262,7 +269,7 @@ async function main() {
     if (!freshness.fresh) {
       isFallback[campus.name] = true;
       allFresh = false;
-      // 即使数据是旧的，仍然处理（总比没有好），但标记为降级
+      // Process it anyway: stale data still beats no data, just flag it.
       console.warn(
         `  ${campus.name}: DATA IS STALE (API returned ${freshness.dataDate}, ` +
         `expected ${beijingToday})`
@@ -277,13 +284,13 @@ async function main() {
   }
 
   // ----------------------------------------------------------
-  // 3. 海南（无实时数据）
+  // 3. Hainan has no realtime data.
   // ----------------------------------------------------------
   campusInfoMap["海南"] = emptyCampusInfo("海南");
-  isFallback["海南"] = true; // 永远走降级
+  isFallback["海南"] = true; // Always a fallback.
 
   // ----------------------------------------------------------
-  // 4. 判断整体新鲜度 & 决定是否部署
+  // 4. Decide the overall freshness and whether to deploy.
   // ----------------------------------------------------------
   const dataIsFresh = anySuccess && allFresh;
 
@@ -294,7 +301,7 @@ async function main() {
     process.exit(0);
   }
 
-  // 构建输出数据
+  // Build the output payload.
   const output = {
     code: 0,
     data: {
@@ -302,7 +309,7 @@ async function main() {
       update_at: new Date().toISOString(),
       data_date: globalDataDate || beijingToday,
       is_fallback: isFallback,
-      // 当数据不是今天的时，推送通知提醒
+      // Push a notification when the data is not from today.
       notification: dataIsFresh
         ? null
         : {
@@ -317,7 +324,7 @@ async function main() {
     },
   };
 
-  // 写入文件
+  // Write the file.
   const outDir = "frontend/public";
   fs.mkdirSync(outDir, { recursive: true });
   fs.writeFileSync(existingPath, JSON.stringify(output));
@@ -327,7 +334,7 @@ async function main() {
     `fallback_campuses=[${Object.keys(isFallback).filter(k => isFallback[k]).join(",")}])`
   );
 
-  // 输出给 GitHub Actions 的状态
+  // State consumed by the GitHub Actions workflow.
   outputGitHubActionsState({
     data_fresh: dataIsFresh ? "true" : "false",
     data_date: globalDataDate,
@@ -335,7 +342,7 @@ async function main() {
 }
 
 // ============================================================
-// 辅助函数
+// Helper functions
 // ============================================================
 
 function emptyCampusInfo(name) {
@@ -348,14 +355,15 @@ function emptyCampusInfo(name) {
 }
 
 /**
- * API 失败或数据陈旧时，保留旧数据 + 加降级标记
+ * Keep the previous data and mark it as a fallback when the API fails or
+ * returns stale data.
  */
 function writeFallbackData(existingData, beijingToday, reason) {
   const outDir = "frontend/public";
   fs.mkdirSync(outDir, { recursive: true });
 
   if (existingData?.data) {
-    // 在旧数据上加降级通知
+    // Attach the fallback notice on top of the previous data.
     existingData.data.is_fallback = {
       ...(existingData.data.is_fallback || {}),
       global: true,
@@ -377,7 +385,7 @@ function writeFallbackData(existingData, beijingToday, reason) {
     );
     console.log(`Fallback: kept existing data with warning (reason=${reason})`);
   } else {
-    // 没有任何旧数据，生成一个空壳
+    // Nothing to fall back to, so emit an empty shell.
     const empty = {
       code: 0,
       data: {
@@ -414,7 +422,7 @@ function writeFallbackData(existingData, beijingToday, reason) {
 }
 
 /**
- * 输出 GitHub Actions 可读取的状态变量
+ * Emit the state variables the GitHub Actions workflow reads back.
  */
 function outputGitHubActionsState(map) {
   const ghaEnvFile = process.env.GITHUB_OUTPUT;
@@ -428,7 +436,7 @@ function outputGitHubActionsState(map) {
 }
 
 // ============================================================
-// 教务数据处理（与 Go 版逻辑一致）
+// Teaching-affairs data processing (matches the Go implementation)
 // ============================================================
 
 function processJWData(jwData, campusName) {
